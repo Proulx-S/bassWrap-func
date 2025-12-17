@@ -1,44 +1,49 @@
-function setAfniDsgn(dsgn,data,param,dryRun,scratchDir)
-    if ~exist('scratchDir', 'var'); scratchDir = []; end
-    if ~isempty(scratchDir) && ~endsWith(scratchDir, [filesep 'tmp']); scratchDir = fullfile(scratchDir, 'tmp'); end
-    if isempty(param) || ~isfield(param,'model') || isempty(param.model); param.model = 'TENTzero'; end
+function [cmd,out] = setAfniDsgn(dsgn,file)
+    if ~exist('file', 'var'); file = []; end
+    % if isempty(param) || ~isfield(param,'model') || isempty(param.model); param.model = 'TENTzero'; end
+    % if isempty(param) || ~isfield(param,'PCflag') || isempty(param.PCflag); param.PCflag = 0; end
+    % if ~exist('dryRun', 'var') || isempty(dryRun); dryRun = 0; end
+    % if ~exist('scratchDir', 'var'); scratchDir = []; end
+    % if ~isempty(scratchDir) && ~endsWith(scratchDir, [filesep 'tmp']); scratchDir = fullfile(scratchDir, 'tmp'); end
+        
 
-    % Assert data
-    switch class(data)
-        case {'double', 'single', 'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64'}
-            % write data to temporary 1D file
-            if isempty(scratchDir)
-                dataFile = tempname;
-            else
-                if ~isfolder(scratchDir); mkdir(scratchDir); end
-                dataFile = tempname(scratchDir);
-            end
-            dataFile = [dataFile '.1D'];
-            if iscolumn(data); data = permute(data,[2 1]); end
-            writematrix(data, dataFile,'Delimiter','space','FileType','text');
-            
-            
-        otherwise
-            dbstack; error(['data is of type ' class(data) '(not implemented)']);
+    % Set output files
+    if isempty(file)
+        file = tempname;
+    elseif isfolder(file)
+        dbstack; error('not sure what to do with file');
+        % if isfolder(scratchDir); mkdir(scratchDir); end
+        % dataFile = tempname(scratchDir);
+    elseif endsWith(file, {'.1D', '.nii','.nii.gz'})
+        file = strsplit(file,'.'); file = file{1};
+    else
+        dbstack; error('not sure what to do with file');
     end
+    out.stimFile    = [file '_stimTimes.1D'];
+    out.respFile    = [file '_resp.1D'     ];
+    out.respStdFile = [file '_respStd.1D'  ];
 
-    % Assert dsgn
+    
+    % Set dsgn
     switch class(dsgn)
         case 'runDsgn'
-            if ~isfolder(scratchDir); mkdir(scratchDir); end
-            stimFile = replace(dataFile,'.1D','_startTimes.1D');
-            writematrix(dsgn.onsetList, stimFile,'Delimiter','space','FileType','text');
+            writematrix(dsgn.onsetList, out.stimFile,'Delimiter','space','FileType','text');
         otherwise
             dbstack; error(['dsgn is of type ' class(dsgn) '(not implemented)']);
     end
 
 
-    
 
 
 
 
     cmd = {};
+    % if param.PCflag
+    %     cmd{end+1} = ['-num_stimts ' num2str(dsgn.condK*2) ' \'];
+    % else
+        cmd{end+1} = ['-num_stimts ' num2str(dsgn.condK) ' \'];
+    % end
+
     % if param.PCflag
     %     cmd{end+1} = ['-stim_label ' num2str(k)            ' ' [char(dsgn.task) '_' dsgn.condLabel{k} 'Real'] ' \'];
     %     cmd{end+1} = ['-stim_label ' num2str(dsgn.condK+k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k} 'Imag'] ' \'];
@@ -46,109 +51,77 @@ function setAfniDsgn(dsgn,data,param,dryRun,scratchDir)
     %     cmd{end+1} = ['-stim_label ' num2str(k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k}] ' \'];
     % end
 
-    % % write design to file
-    % if dryRun
-    %     fStim = [tempname '_startTime.1D' ];
-    % end
 
-    % if param.PCflag
-    %     %real
-    %     fido = fopen(fStim{:,:,1}, 'w');
-    %     for i = 1:size(fIn,1)
-    %         fprintf(fido,'%.3f ',dsgn.onsetList(kList(k)==dsgn.cond));
-    %         fprintf(fido,'\n');
-    %     end
-    %     for i = 1:size(fIn,1)
-    %         fprintf(fido,'*');
-    %         fprintf(fido,'\n');
-    %     end
-    %     fclose(fido);
-    %     %imag
-    %     fido = fopen(fStim{:,:,2}, 'w');
-    %     for i = 1:size(fIn,1)
-    %         fprintf(fido,'*');
-    %         fprintf(fido,'\n');
-    %     end
-    %     for i = 1:size(fIn,1)
-    %         fprintf(fido,'%.3f ',dsgn.onsetList(kList(k)==dsgn.cond));
-    %         fprintf(fido,'\n');
-    %     end
-    %     fclose(fido);
-    % else
-    %     fido = fopen(char(fStim), 'w');
-    %     if ~iscell(fIn); dbstack; error('fIn must be type cell'); end
-    %     for i = 1:size(fIn,1)
-    %         fprintf(fido,'%.3f ',dsgn.onsetList(kList(k)==dsgn.cond));
-    %         fprintf(fido,'\n');
-    %     end
-    %     fclose(fido);
-    % end
 
     kList = sort(unique(dsgn.cond));
     for k = 1:dsgn.condK
-        cmd{end+1} = ['-stim_label ' num2str(k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k}] ' \'];
+        % if param.PCflag
+        %     dbstack; error('double-check that');
+        %     cmd{end+1} = ['-stim_label ' num2str(k)            ' ' [char(dsgn.task) '_' dsgn.condLabel{k} 'Real'] ' \'];
+        %     cmd{end+1} = ['-stim_label ' num2str(dsgn.condK+k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k} 'Imag'] ' \'];
+        % else
+            cmd{end+1} = ['-stim_label ' num2str(k) ' ' [char(dsgn.task) '_' dsgn.condLabel{k}] ' \'];
+        % end
+
     
         % Set model
-        switch param.model
+        switch dsgn.model
             case 'SPMG2'
                 dbstack; error('double-check that')
                 dur = dsgn.ondurList(kList(k)==dsgn.cond); if ~isempty(dur) && any(diff(dur)); dbstack; error('stim duration cannot be different across trials'); end
                 dur = dur(1);
-                nReg = 2;
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim{k} ' ''' param.model '(' num2str(dur,'%0.3f') ')'' \'];
-                nRegAll(k) = nReg;
+                out.nReg = 2;
+                cmd{end+1} = ['-stim_times ' num2str(k) ' ' out.stimFile{k} ' ''' param.model '(' num2str(dur,'%0.3f') ')'' \'];
+                out.nRegAll(k) = out.nReg;
             case 'SPMG3'
                 dbstack; error('double-check that')
-                nReg = 3;
+                out.nReg = 3;
                 if max(abs(diff(durSeq)))/max(durSeq) > 0.0001; dbstack; error('stim duration cannot be different across trials'); end
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' fStim ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
+                cmd{end+1} = ['-stim_times ' num2str(k) ' ' out.stimFile ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
             case 'TENT'
                 dbstack; error('code that')
             case 'TENTzero'
                 % set the deconvolution window to the maximum (all the way up to the next stimulus or the end of the run)
                 eTime     = dsgn.onsetList(dsgn.cond==kList(k));
-                eTimeNext = find(dsgn.cond==kList(k))+1;
-                if eTimeNext(end) > length(dsgn.onsetList)
-                    eTimeNext(end) = [];
-                    eTimeNext = dsgn.onsetList(eTimeNext);
-                    eTimeNext(end+1) = max(param.nFrame) * mean(param.tr); % use max nFrame in case of a run interruption
-                    % eTimeNext(end+1) = (param.nFrame + mode(param.nFrameOrig - param.nFrame)) * mean(param.tr);
+                eTimeNext_idx = find(dsgn.cond==kList(k))+1;
+                if eTimeNext_idx(end) > length(dsgn.onsetList)
+                    eTimeNext_idx(end) = [];
+                    eTimeNext = dsgn.onsetList(eTimeNext_idx);
+                    eTimeNext(end+1) = dsgn.n / dsgn.sr;
                 else
-                    eTimeNext = dsgn.onsetList(eTimeNext);
+                    eTimeNext = dsgn.onsetList(eTimeNext_idx);
                 end
-                deconWin = min(eTimeNext - eTime);
-                if isfield(param,'durDecon') && ~isempty(param.durDecon)
-                    deconWin = deconWin.*param.durDecon;
-                end
-                % deconWin = deconWin - 3*tr; % ensure at least one acquisition tr (not trDecon) of baseline between each stimulus
-                if (deconWin/param.trDecon)/ceil(deconWin/param.trDecon)>0.9
-                    deconWin = ceil(deconWin/param.trDecon)*param.trDecon;
+                deconWin_sec = min(eTimeNext - eTime);
+                if (deconWin_sec*dsgn.dr)/ceil(deconWin_sec*dsgn.dr)>0.9
+                    deconWin_sec = ceil(deconWin_sec*dsgn.dr)/dsgn.dr;
                 else
-                    deconWin = floor(deconWin/param.trDecon)*param.trDecon;
+                    deconWin_sec = floor(deconWin_sec*dsgn.dr)/dsgn.dr;
                 end
                 b = 0;
-                c = round((deconWin-param.trDecon)/param.trDecon)*param.trDecon;
-                nReg = round( (c-b)/param.trDecon + 1 );
+                c = round((deconWin_sec-1/dsgn.dr)*dsgn.dr)/dsgn.dr;
+                out.nReg = round( (c-b)*dsgn.dr + 1 );
                 % (c-b)/(nReg-1)
-                if param.PCflag
-                    cmd{end+1} = ['-stim_times ' num2str(k)            ' ' fStim{:,:,1} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
-                    cmd{end+1} = ['-stim_times ' num2str(dsgn.condK+k) ' ' fStim{:,:,2} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
-                else
-                    cmd{end+1} = ['-stim_times ' num2str(k) ' ' char(fStim) ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
-                end
-                nReg = nReg - 2;
-                if ~dryRun
-                    if param.PCflag
-                        cmd{end+1} = ['-iresp ' num2str(k)            ' ' fResp{:,:,1}    ' \'];
-                        cmd{end+1} = ['-sresp ' num2str(k)            ' ' fRespStd{:,:,1} ' \'];
-                        cmd{end+1} = ['-iresp ' num2str(dsgn.condK+k) ' ' fResp{:,:,2}    ' \'];
-                        cmd{end+1} = ['-sresp ' num2str(dsgn.condK+k) ' ' fRespStd{:,:,2} ' \'];
-                    else
-                        cmd{end+1} = ['-iresp ' num2str(k) ' ' char(fResp)    ' \'];
-                        cmd{end+1} = ['-sresp ' num2str(k) ' ' char(fRespStd) ' \'];
-                    end
-                end
+                % if param.PCflag
+                %     dbstack; error('double-check that');
+                %     cmd{end+1} = ['-stim_times ' num2str(k)            ' ' fStim{:,:,1} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+                %     cmd{end+1} = ['-stim_times ' num2str(dsgn.condK+k) ' ' fStim{:,:,2} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+                % else
+                    cmd{end+1} = ['-stim_times ' num2str(k) ' ' char(out.stimFile) ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(out.nReg) ')'' \'];
+                % end
+                out.nReg = out.nReg - 2;
+                % if ~dryRun
+                    % if param.PCflag
+                    %     dbstack; error('double-check that');
+                    %     cmd{end+1} = ['-iresp ' num2str(k)            ' ' fResp{:,:,1}    ' \'];
+                    %     cmd{end+1} = ['-sresp ' num2str(k)            ' ' fRespStd{:,:,1} ' \'];
+                    %     cmd{end+1} = ['-iresp ' num2str(dsgn.condK+k) ' ' fResp{:,:,2}    ' \'];
+                    %     cmd{end+1} = ['-sresp ' num2str(dsgn.condK+k) ' ' fRespStd{:,:,2} ' \'];
+                    % else
+                        cmd{end+1} = ['-iresp ' num2str(k) ' ' char(out.respFile)    ' \'];
+                        cmd{end+1} = ['-sresp ' num2str(k) ' ' char(out.respStdFile) ' \'];
+                    % end
+                % end
             otherwise
-                dbstak; error('X');
+                dbstak; error('unknown model');
         end
     end
