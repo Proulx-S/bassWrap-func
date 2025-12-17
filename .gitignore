@@ -1,0 +1,44 @@
+# MATLAB
+*.asv
+*.m~
+*.fig
+*.fig.bak
+*.mlappinstall
+*.mltbx
+*.prj
+*.slxc
+*.slx.autosave
+*.autosave
+
+# MATLAB Compiler
+*.ctf
+
+# MATLAB Cache
+.mlintcache/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+*.mex*
+*.p
+
+# Data files (if any)
+*.mat
+*.csv
+*.txt
+!README.txt
+
+# Logs
+*.log
+
