@@ -1,4 +1,4 @@
-function [cmd,out] = setAfniDsgn(dsgn,file)
+function [cmd,files,dsgn] = setAfniDsgn(dsgn,file)
     if ~exist('file', 'var'); file = []; end
     % if isempty(param) || ~isfield(param,'model') || isempty(param.model); param.model = 'TENTzero'; end
     % if isempty(param) || ~isfield(param,'PCflag') || isempty(param.PCflag); param.PCflag = 0; end
@@ -19,15 +19,15 @@ function [cmd,out] = setAfniDsgn(dsgn,file)
     else
         dbstack; error('not sure what to do with file');
     end
-    out.stimFile    = [file '_stimTimes.1D'];
-    out.respFile    = [file '_resp.1D'     ];
-    out.respStdFile = [file '_respStd.1D'  ];
+    files.stimTimes    = [file '_stimTimes.1D'];
+    files.resp    = [file '_resp.1D'     ];
+    files.respStd = [file '_respStd.1D'  ];
 
     
     % Set dsgn
     switch class(dsgn)
         case 'runDsgn'
-            writematrix(dsgn.onsetList, out.stimFile,'Delimiter','space','FileType','text');
+            writematrix(dsgn.onsetList, files.stimTimes,'Delimiter','space','FileType','text');
         otherwise
             dbstack; error(['dsgn is of type ' class(dsgn) '(not implemented)']);
     end
@@ -70,14 +70,14 @@ function [cmd,out] = setAfniDsgn(dsgn,file)
                 dbstack; error('double-check that')
                 dur = dsgn.ondurList(kList(k)==dsgn.cond); if ~isempty(dur) && any(diff(dur)); dbstack; error('stim duration cannot be different across trials'); end
                 dur = dur(1);
-                out.nReg = 2;
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' out.stimFile{k} ' ''' param.model '(' num2str(dur,'%0.3f') ')'' \'];
-                out.nRegAll(k) = out.nReg;
+                nReg = 2;
+                cmd{end+1} = ['-stim_times ' num2str(k) ' ' files.stimTimes{k} ' ''' param.model '(' num2str(dur,'%0.3f') ')'' \'];
+                nRegAll(k) = nReg;
             case 'SPMG3'
                 dbstack; error('double-check that')
-                out.nReg = 3;
+                nReg = 3;
                 if max(abs(diff(durSeq)))/max(durSeq) > 0.0001; dbstack; error('stim duration cannot be different across trials'); end
-                cmd{end+1} = ['-stim_times ' num2str(k) ' ' out.stimFile ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
+                cmd{end+1} = ['-stim_times ' num2str(k) ' ' files.stimTimes ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
             case 'TENT'
                 dbstack; error('code that')
             case 'TENTzero'
@@ -92,23 +92,27 @@ function [cmd,out] = setAfniDsgn(dsgn,file)
                     eTimeNext = dsgn.onsetList(eTimeNext_idx);
                 end
                 deconWin_sec = min(eTimeNext - eTime);
-                if (deconWin_sec*dsgn.dr)/ceil(deconWin_sec*dsgn.dr)>0.9
-                    deconWin_sec = ceil(deconWin_sec*dsgn.dr)/dsgn.dr;
+                deconSR = dsgn.TENTzero.sr;
+                if (deconWin_sec*deconSR)/ceil(deconWin_sec*deconSR)>0.9
+                    deconWin_sec = ceil(deconWin_sec*deconSR)/deconSR;
                 else
-                    deconWin_sec = floor(deconWin_sec*dsgn.dr)/dsgn.dr;
+                    deconWin_sec = floor(deconWin_sec*deconSR)/deconSR;
                 end
                 b = 0;
-                c = round((deconWin_sec-1/dsgn.dr)*dsgn.dr)/dsgn.dr;
-                out.nReg = round( (c-b)*dsgn.dr + 1 );
+                c = round((deconWin_sec-1/deconSR)*deconSR)/deconSR;
+                nReg = round( (c-b)*deconSR + 1 );
                 % (c-b)/(nReg-1)
                 % if param.PCflag
                 %     dbstack; error('double-check that');
                 %     cmd{end+1} = ['-stim_times ' num2str(k)            ' ' fStim{:,:,1} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
                 %     cmd{end+1} = ['-stim_times ' num2str(dsgn.condK+k) ' ' fStim{:,:,2} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
                 % else
-                    cmd{end+1} = ['-stim_times ' num2str(k) ' ' char(out.stimFile) ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(out.nReg) ')'' \'];
+                    cmd{end+1} = ['-stim_times ' num2str(k) ' ' char(files.stimTimes) ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
                 % end
-                out.nReg = out.nReg - 2;
+
+                % deconvolve time vector
+                % for TENTzero the first and last regressors are removed and a fitted value of zero is assumed, effectively fixing these time points to the baseline
+                dsgn.TENTzero.tReg = linspace(b,c,nReg);
                 % if ~dryRun
                     % if param.PCflag
                     %     dbstack; error('double-check that');
@@ -117,8 +121,9 @@ function [cmd,out] = setAfniDsgn(dsgn,file)
                     %     cmd{end+1} = ['-iresp ' num2str(dsgn.condK+k) ' ' fResp{:,:,2}    ' \'];
                     %     cmd{end+1} = ['-sresp ' num2str(dsgn.condK+k) ' ' fRespStd{:,:,2} ' \'];
                     % else
-                        cmd{end+1} = ['-iresp ' num2str(k) ' ' char(out.respFile)    ' \'];
-                        cmd{end+1} = ['-sresp ' num2str(k) ' ' char(out.respStdFile) ' \'];
+                        cmd{end+1} = ['-iresp ' num2str(k) ' ' char(files.resp)    ' \'];
+                        cmd{end+1} = ['-sresp ' num2str(k) ' ' char(files.respStd) ' \'];
+                        cmd{end+1} = ['-TR_times ' num2str(1/deconSR) ' \'];
                     % end
                 % end
             otherwise

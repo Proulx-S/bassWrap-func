@@ -1,32 +1,39 @@
-function file = runAfni_3dDeconvolve(data,dsgn,scratch)
-
+function [files,dsgn,cmd,res] = afni_3dDeconvolve(data,dsgn,scratch)
+global src
     
 
 
 
-% write data to temporary 1D file
 
 if isempty(scratch)
-    file.prefix = tempname;
+    files.prefix = tempname;
 else
     if ~isfolder(scratch); mkdir(scratch); end
-    file.prefix = tempname(scratch);
+    files.prefix = tempname(scratch);
 end
-file.data  = [file.prefix '_ts.1D'];
-file.xmat  = [file.prefix '.xmat.1D'];
-file.stats = [file.prefix '_stats'];
+files.cmd   = [files.prefix '_cmd.txt'];
+files.data  = [files.prefix '_ts.1D'];
+files.data3D = [files.prefix '_tsX'];
+files.xmat  = [files.prefix '.xmat.1D'];
+files.stats = [files.prefix '_stats'];
+
+% Write data to 1D file (one value per line for proper 3dTcat conversion)
+if iscolumn(data); data = permute(data,[2 1]); end
+% Format as column vector (one value per line)
+% dataCol = data(:);
+writematrix(data, files.data,'Delimiter','space','FileType','text');
+
+% % Convert 1D file to AFNI +orig format (single-voxel 3D+time dataset)
+% % This forces 3dDeconvolve to output in bucket format
+% cmdTcat = {src.afni};
+% cmdTcat{end+1} = '3dTcat -overwrite \';
+% cmdTcat{end+1} = ['-prefix ' files.data ' \'];
+% cmdTcat{end+1} = ['-tr ' num2str(1/dsgn.sr) ' \'];
+% cmdTcat{end+1} = files.data;
+% system(strjoin(cmdTcat,newline),'-echo');
 
 
-if iscolumn(ts); ts = permute(ts,[2 1]); end
-writematrix(ts, file.data,'Delimiter','space','FileType','text');
 
-
-dsgn = runDsgn;
-dsgn.onsetList = 0:10:(length(ts)/sr);
-dsgn.n         = length(ts);
-dsgn.sr        = sr;
-dsgn.model     = 'TENTzero';
-dsgn.dr        = 1/0.1;
 dsgn = setDsgn(dsgn);
 
 % prefix = {};
@@ -39,15 +46,15 @@ dsgn = setDsgn(dsgn);
 
 cmd = {src.afni};
 cmd{end+1} = '3dDeconvolve -overwrite \';
-cmd{end+1} = ['-input1D ' file.data ' \'];
-cmd{end+1} = ['-TR_1D ' num2str(1/sr) ' \'];
+cmd{end+1} = ['-input1D ' files.data ' \'];
+cmd{end+1} = ['-TR_1D ' num2str(1/dsgn.sr) ' \'];
 cmd{end+1} = '-polort 0 \';
 cmd{end+1} = ['-local_times \'];
-[cmdTmp,out] = setAfniDsgn(dsgn,file.data);
+[cmdTmp,tmpFiles,dsgn] = setAfniDsgn(dsgn,files.data);
 cmd = [cmd cmdTmp];
-file.resp      = out.respFile;
-file.respStd   = out.respStdFile;
-file.stimTimes = out.stimFile;
+files.resp      = tmpFiles.resp;
+files.respStd   = tmpFiles.respStd;
+files.stimTimes = tmpFiles.stimTimes;
 
 
 
@@ -68,7 +75,7 @@ file.stimTimes = out.stimFile;
     %         dbstack; error('code that')
     %         cmd{end+1} = ['-errts ' char(fResid) ' \'];
     %     end
-        cmd{end+1} = '-bout -fout \';
+        cmd{end+1} = '-bout -fout -rout \';
     % end
 
     %%%%%%%%%%%%%%
@@ -87,7 +94,7 @@ file.stimTimes = out.stimFile;
 
     % if ~dryRun
         % if verbose>0
-            cmd{end+1} = ['-bucket ' char(file.stats)];
+            cmd{end+1} = ['-bucket ' char(files.stats)];
         % else
         %     cmd{end+1} = ['-bucket ' char(file.stats) ' 2>/dev/null'];
         % end
@@ -97,7 +104,7 @@ file.stimTimes = out.stimFile;
     %%%%%%%%%%%%%%
     %%% GET AROUND LINUX PATH LENGTH SOFT LIMITATION
     % fMatTmp3 = char(replace(fMat,'.xmat.1D','.xmatCnsrClmn.1D'));
-    cmd{end+1} = ['cp ' char(fMatTmp) ' ' char(file.xmat)];
+    cmd{end+1} = ['cp ' char(fMatTmp) ' ' char(files.xmat)];
     % if ~isempty(cnsr)
     %     cmd{end+1} = ['cp ' char(fMatTmp2) ' ' fMatTmp3];
     % elseif exist(fMatTmp3,'file') % if this file exists, it is garbage from a previous run and can interfere in plotDsgnMat.m
@@ -113,10 +120,25 @@ file.stimTimes = out.stimFile;
 
 
 disp(strjoin(cmd,newline));
-system(strjoin(cmd,newline),'-echo');
+[cmdErr,cmdOut] = system(strjoin(cmd,newline),'-echo'); if cmdErr; dbstack; error(cmdOut); end
+
+% if 1D file, we will have to get stats from cmdOut
 
 
-resp = readmatrix(file.resp,'FileType','text');
-respStd = readmatrix(file.respStd,'FileType','text');
+fid = fopen(files.cmd, 'w');
+fprintf(fid, '%s', strjoin(cmd, newline));
+fclose(fid);
+
+
+%% Read back results
+
+res.resp = readmatrix(files.resp,'FileType','text');
+res.respStd = readmatrix(files.respStd,'FileType','text');
+res.xMat = afni_readDsgnMat(files.xmat,dsgn);
+
+
+files.stats
+
+
 figure('MenuBar','none','Toolbar','none');
-errorbar(resp,respStd);
+errorbar(res.resp,res.respStd);
