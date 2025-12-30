@@ -1,4 +1,4 @@
-function [cmd,files,dsgn] = setAfniDsgn(dsgn,file)
+function [cmd,files,dsgn] = afni_setDsgn(dsgn,file)
     if ~exist('file', 'var'); file = []; end
     % if isempty(param) || ~isfield(param,'model') || isempty(param.model); param.model = 'TENTzero'; end
     % if isempty(param) || ~isfield(param,'PCflag') || isempty(param.PCflag); param.PCflag = 0; end
@@ -34,6 +34,12 @@ function [cmd,files,dsgn] = setAfniDsgn(dsgn,file)
 
 
 
+    switch dsgn.model
+        case {'TENTzero', 'TENT'}
+            if isempty(dsgn.TENTzero.windowMethod)
+                dsgn.TENTzero.windowMethod = 'minISIrunInterrupted';
+            end
+    end
 
 
 
@@ -81,26 +87,57 @@ function [cmd,files,dsgn] = setAfniDsgn(dsgn,file)
             case 'TENT'
                 dbstack; error('code that')
             case 'TENTzero'
-                % set the deconvolution window to the maximum (all the way up to the next stimulus or the end of the run)
-                eTime     = dsgn.onsetList(dsgn.cond==kList(k));
-                eTimeNext_idx = find(dsgn.cond==kList(k))+1;
-                if eTimeNext_idx(end) > length(dsgn.onsetList)
-                    eTimeNext_idx(end) = [];
-                    eTimeNext = dsgn.onsetList(eTimeNext_idx);
-                    eTimeNext(end+1) = dsgn.n / dsgn.sr;
-                else
-                    eTimeNext = dsgn.onsetList(eTimeNext_idx);
+                switch dsgn.TENTzero.windowMethod
+                    case 'minISI'
+                        % set the deconvolution window to the minimum ISI
+                        % ISI is the time between any stimulus (of any condition)
+                        eTime     = dsgn.onsetList(dsgn.cond==kList(k));
+                        eTimeNext_idx = find(dsgn.cond==kList(k))+1;
+                        if eTimeNext_idx(end) > length(dsgn.onsetList)
+                            % this is the last stimulus of the run, create a dummy stimulus at the end of the run
+                            eTimeNext_idx(end) = [];
+                            eTimeNext = dsgn.onsetList(eTimeNext_idx);
+                            eTime(end) = [];
+                        else
+                            eTimeNext = dsgn.onsetList(eTimeNext_idx);
+                        end
+                        deconWin_sec = min(eTimeNext - eTime);
+                        deconSR = dsgn.TENTzero.sr;
+                        if (deconWin_sec*deconSR)/ceil(deconWin_sec*deconSR)>0.9
+                            deconWin_sec = ceil(deconWin_sec*deconSR)/deconSR;
+                        else
+                            deconWin_sec = floor(deconWin_sec*deconSR)/deconSR;
+                        end
+                        b = 0;
+                        c = round((deconWin_sec-1/deconSR)*deconSR)/deconSR;
+                        nReg = round( (c-b)*deconSR + 1 );        
+                    case 'minISIrunInterrupted'
+                        % set the deconvolution window to the smallest of
+                        %  the minimum ISI or
+                        %  the time between the last stimulus of the current condition and the end of the run
+                        % ISI is the time between any stimulus (of any condition)
+                        eTime     = dsgn.onsetList(dsgn.cond==kList(k));
+                        eTimeNext_idx = find(dsgn.cond==kList(k))+1;
+                        if eTimeNext_idx(end) > length(dsgn.onsetList)
+                            % this is the last stimulus of the run, create a dummy stimulus at the end of the run
+                            eTimeNext_idx(end) = [];
+                            eTimeNext = dsgn.onsetList(eTimeNext_idx);
+                            eTimeNext(end+1) = double(dsgn.n) / dsgn.sr;
+                        else
+                            eTimeNext = dsgn.onsetList(eTimeNext_idx);
+                        end
+                        deconWin_sec = min(eTimeNext - eTime);
+                        deconSR = dsgn.TENTzero.sr;
+                        if (deconWin_sec*deconSR)/ceil(deconWin_sec*deconSR)>0.9
+                            deconWin_sec = ceil(deconWin_sec*deconSR)/deconSR;
+                        else
+                            deconWin_sec = floor(deconWin_sec*deconSR)/deconSR;
+                        end
+                        b = 0;
+                        c = round((deconWin_sec-1/deconSR)*deconSR)/deconSR;
+                        nReg = round( (c-b)*deconSR + 1 );        
                 end
-                deconWin_sec = min(eTimeNext - eTime);
-                deconSR = dsgn.TENTzero.sr;
-                if (deconWin_sec*deconSR)/ceil(deconWin_sec*deconSR)>0.9
-                    deconWin_sec = ceil(deconWin_sec*deconSR)/deconSR;
-                else
-                    deconWin_sec = floor(deconWin_sec*deconSR)/deconSR;
-                end
-                b = 0;
-                c = round((deconWin_sec-1/deconSR)*deconSR)/deconSR;
-                nReg = round( (c-b)*deconSR + 1 );
+
                 % (c-b)/(nReg-1)
                 % if param.PCflag
                 %     dbstack; error('double-check that');
