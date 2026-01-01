@@ -133,14 +133,14 @@ function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbo
     voxelData = parseVoxelResultsFromCmdOut(cmdOut);
     sectionStruct = parseAfniDeconvolveSections(voxelData.text);
     for i = 1:length(sectionStruct.stimulus)
-        res.respStats(i) = parseSectionStats(sectionStruct.stimulus{i});
+        [~,res.respStats(i)] = parseSectionStats(sectionStruct.stimulus{i});
     end
-    res.fullStats = parseSectionStats(sectionStruct.fullModel{1});
+    [res.baseline,~] = parseSectionStats(sectionStruct.baseline{1});
+    [~,res.fullStats] = parseSectionStats(sectionStruct.fullModel{1});
 
+    res.resp = res.resp + res.baseline;
 
     res.dsgn = dsgn;
-
-
 
     % clean tmp files
     delete([files.prefix '*']);
@@ -251,23 +251,49 @@ end
 
 
 
-function stats = parseSectionStats(sectionText)
-    % Parse statistics from the last line(s) of a stimulus or fullModel section
-    % Extracts MSE, R^2, F-statistic (with degrees of freedom), and p-value
+function [coef,stats] = parseSectionStats(sectionText)
+    % Parse statistics from a stimulus or fullModel section
+    % Extracts coefficients, MSE, R^2, F-statistic (with degrees of freedom), and p-value
     %
     % Input:
     %   sectionText - String containing the section text
     % Output:
+    %   coef - Column vector of coefficient values
     %   stats - Struct with fields: MSE, R2, F, F_df1, F_df2, pvalue
     
+    coef = [];
     stats = struct('MSE', [], 'R2', [], 'F', [], 'F_df1', [], 'F_df2', [], 'pvalue', []);
     
-    % Split into lines and get the last non-empty line(s)
+    % Split into lines
     lines = regexp(sectionText, '\r?\n', 'split');
     nonEmptyLines = lines(~cellfun(@isempty, strtrim(lines)));
     
     if isempty(nonEmptyLines)
         return
+    end
+    
+    % Parse coefficients from all lines
+    coefValues = [];
+    for i = 1:length(nonEmptyLines)
+        line = strtrim(nonEmptyLines{i});
+        
+        % Check for h[#] coef pattern (stimulus)
+        hCoefMatch = regexp(line, 'h\[\s*(\d+)\]\s+coef\s*=\s*([\d.eE+-]+)', 'tokens', 'once');
+        if ~isempty(hCoefMatch)
+            coefValues(end+1) = str2double(hCoefMatch{2});
+            continue
+        end
+        
+        % Check for P_0 coef pattern (baseline)
+        p0CoefMatch = regexp(line, 'P_0\s+coef\s*=\s*([\d.eE+-]+)', 'tokens', 'once');
+        if ~isempty(p0CoefMatch)
+            coefValues(end+1) = str2double(p0CoefMatch{1});
+            continue
+        end
+    end
+    
+    if ~isempty(coefValues)
+        coef = coefValues(:);  % Return as column vector
     end
     
     % Get the last line (or last two lines if MSE is on a separate line)
