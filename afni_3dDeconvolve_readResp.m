@@ -1,5 +1,6 @@
-function resp = afni_3dDeconvolve_readResp(respFile,respStdFile)
+function deconStruct = afni_3dDeconvolve_readResp(deconStruct)
 
-resp.resp.mri    = MRIread(respFile);
-resp.respStd.mri = MRIread(respStdFile);
-
+    resp.mri    = MRIread(deconStruct.res.files.resp);
+    deconStruct.res.resp.resp = resp;
+    respStd.mri    = MRIread(deconStruct.res.files.respStd);
+    deconStruct.res.resp.respStd = respStd;

@@ -1,6 +1,7 @@
-function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbose)
+function [deconStruct,cmdOut] = afni_3dDeconvolve(data,dsgn,scratch,verbose)
     global src
     if ~exist('verbose','var') || isempty(verbose); verbose = false; end
+
 
 
 
@@ -18,7 +19,7 @@ function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbo
     if iscell(data)
         for i = 1:length(data)
             if isnumeric(data{i})
-                files.data{i} = [files.prefix '_ts' num2str(i) '.nii.gz'];
+                files.data{i} = [files.prefix '_run' num2str(i) '.nii.gz'];
                 MRIwriteDummy(files.data{i}, [data{i} zeros(size(data{i}))], 1/dsgn.sr);
                 data{i} = files.data{i};
             else
@@ -26,6 +27,7 @@ function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbo
             end
         end
     else
+        error('we don''t support this data format anymore');
         files.data  = [files.prefix '_ts.1D'];
     end
     files.xmat  = [files.prefix '.xmat.1D'];
@@ -57,7 +59,7 @@ function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbo
     % cmd{end+1} = ['-TR_1D ' num2str(1/dsgn.sr) ' \'];
     cmd{end+1} = '-polort 0 \';
     cmd{end+1} = ['-local_times \'];
-    [cmdTmp,tmpFiles,dsgn] = afni_setDsgn(dsgn,files.data{1});
+    [cmdTmp,tmpFiles,dsgn] = afni_setDsgn(dsgn,files.prefix);
     cmd = [cmd cmdTmp];
     files.resp      = tmpFiles.resp;
     files.respStd   = tmpFiles.respStd;
@@ -130,41 +132,17 @@ function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbo
     cmdOut = runSysCmd(cmd, files.cmd, verbose);
 
 
+    deconStruct = var_afniDecon;
+    deconStruct.files = files;
+    deconStruct.dsgn = dsgn;
+    deconStruct.cmd = cmd;
+    deconStruct.res = struct('files', struct);
+    deconStruct.res.files.data    = files.data;
+    deconStruct.res.files.resp    = files.resp;
+    deconStruct.res.files.respStd = files.respStd;
+    deconStruct.res.resp.resp     = files.resp;
+    deconStruct.res.resp.respStd  = files.respStd;
 
-    %% Read 3dDeconvolve results
-    res.stats = afni_3dDeconvolve_readStats(files.stats);
-    res.resp  = afni_3dDeconvolve_readResp(files.resp,files.respStd);
-    res.base  = afni_3dDeconvolve_readBase(files.base);
-
-
-    % Read baseline to matlab
-labelList = {'baselineCoef'};
-for i = 1:numel(labelList)
-    stats.baseline.(labelList{i}).mri = MRIread(stats.file.(labelList{i}));
-end
-
-
-
-
-    % %% Read back results
-    % res.xMat = afni_readDsgnMat(files.xmat,dsgn);
-    % res.resp = readmatrix(files.resp,'FileType','text');
-    % res.respStd = readmatrix(files.respStd,'FileType','text');
-
-    % voxelData = parseVoxelResultsFromCmdOut(cmdOut);
-    % sectionStruct = parseAfniDeconvolveSections(voxelData.text);
-    % for i = 1:length(sectionStruct.stimulus)
-    %     [~,res.respStats(i)] = parseSectionStats(sectionStruct.stimulus{i});
-    % end
-    % [res.baseline,~] = parseSectionStats(sectionStruct.baseline{1});
-    % [~,res.fullStats] = parseSectionStats(sectionStruct.fullModel{1});
-
-    % res.resp = res.resp + res.baseline;
-
-    % res.dsgn = dsgn;
-
-    % clean tmp files
-    delete([files.prefix '*']);
 end
 
 

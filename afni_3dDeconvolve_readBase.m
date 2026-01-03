@@ -1,3 +1,3 @@
-function base = afni_3dDeconvolve_readBase(baseFile)
+function deconStruct = afni_3dDeconvolve_readBase(deconStruct)
 
-    base.mri = MRIread(baseFile);
+    deconStruct.res.base.mri = MRIread(deconStruct.res.files.baselineCoef);

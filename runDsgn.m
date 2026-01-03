@@ -15,6 +15,7 @@ classdef runDsgn
       TENTzero  (1,1) struct        % [1 x 1] struct containing parameters relevant to the TENTzero model
       TENT      (1,1) struct        % [1 x 1] struct containing parameters relevant to the TENT model
       SPMG2     (1,1) struct        % [1 x 1] struct containing parameters relevant to the SPMG2 model
+      xMat      (1,1) struct        % design matrix
    end
    
    properties (Constant, Hidden)
@@ -30,8 +31,9 @@ classdef runDsgn
           'n', '', ...
           'model', '', ...
           'TENTzero', struct('sr', 'Hz', 'tReg', 's', 'windowMethod', ''), ...
-          'TENT', struct('sr', 'Hz', 'tReg', 's'), ...
-          'SPMG2', struct('params', '') ...
+          'TENT'    , struct('sr', 'Hz', 'tReg', 's', 'windowMethod', ''), ...
+          'SPMG2', '', ...
+          'xMat', struct( 'tRun', 's', 'tStim', 's') ...
       );
    end
    
@@ -49,14 +51,17 @@ classdef runDsgn
           % Initialize TENT substructure
           obj.TENT = struct(...
             'sr'  , [], ...                 % sampling rate (Hz)
-            'tReg', zeros(0,1) ...          % time vector for regressors (seconds), always column vector
+            'tReg', zeros(0,1), ...          % time vector for regressors (seconds), always column vector
+            'windowMethod', '' ...          % window method: 'minISI' or 'minISIrunInterrupted'
         );
           
-          % Initialize SPMG2 substructure
-          obj.SPMG2 = struct(...
-              'params', [] ...               % SPMG2 model parameters
+          % Initialize xMat substructure
+          obj.xMat = struct(...
+              'mat', [], ...               % design matrix
+              'tRun', [], ...               % time vector for regressors (seconds), always column vector
+              'tStim', [] ...               % time vector for regressors (seconds), always column vector
           );
-      end
+    end
       
       function obj = set.TENTzero(obj, val)
           % Property setter: Ensure tReg is always a column vector
@@ -124,25 +129,29 @@ classdef runDsgn
                       valueStr = '[1×1 struct]';
                   else
                       % Check if this substructure has units defined
-                      if isstruct(unit) && isfield(unit, fnames{1})
-                          % Build string with field names and units
-                          fnameUnitPairs = cell(1, length(fnames));
-                          for j = 1:length(fnames)
-                              fname = fnames{j};
-                              if isfield(unit, fname) && ~isempty(unit.(fname))
-                                  fnameUnitPairs{j} = sprintf('%s (%s)', fname, unit.(fname));
-                              else
-                                  fnameUnitPairs{j} = fname;
+                      if isstruct(unit)
+                          % Only show fields that have units defined (non-empty)
+                          unitFields = fieldnames(unit);
+                          fnameUnitPairs = {};
+                          for j = 1:length(unitFields)
+                              fname = unitFields{j};
+                              if isfield(value, fname) && ~isempty(unit.(fname))
+                                  fnameUnitPairs{end+1} = sprintf('%s (%s)', fname, unit.(fname));
                               end
                           end
-                          fnamesStr = strjoin(fnameUnitPairs, ', ');
+                          if isempty(fnameUnitPairs)
+                              valueStr = '[1×1 struct]';
+                          else
+                              fnamesStr = strjoin(fnameUnitPairs, ', ');
+                              if length(fnamesStr) > 50
+                                  fnamesStr = [fnamesStr(1:47) '...'];
+                              end
+                              valueStr = sprintf('[1×1 struct: %s]', fnamesStr);
+                          end
                       else
-                          fnamesStr = strjoin(fnames, ', ');
+                          % No units defined, just show [1×1 struct] without field names
+                          valueStr = '[1×1 struct]';
                       end
-                      if length(fnamesStr) > 50
-                          fnamesStr = [fnamesStr(1:47) '...'];
-                      end
-                      valueStr = sprintf('[1×1 struct: %s]', fnamesStr);
                   end
               else
                   valueStr = sprintf('[%s]', class(value));

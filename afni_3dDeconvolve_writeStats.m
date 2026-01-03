@@ -1,15 +1,15 @@
-function stats = afni_3dDeconvolve_writeStats(statsFile)
+function res = afni_3dDeconvolve_writeStats(statsFile)
 % afni_3dDeconvolve_writeStats - Extract and write statistics from AFNI 3dDeconvolve bucket file
 %
 % Syntax:
-%   stats = afni_3dDeconvolve_writeStats(statsFile)
+%   res = afni_3dDeconvolve_writeStats(statsFile)
 %
 % Inputs:
 %   statsFile - String prefix for the AFNI bucket file (e.g., 'prefix_stats')
 %                The function will look for statsFile+orig.HEAD and statsFile+orig.BRIK
 %
 % Outputs:
-%   stats      - Structure containing file paths and indices:
+%   res      - Structure containing file paths and indices:
 %                .file.bucket        - Original bucket file prefix
 %                .brik.labels        - Cell array of sub-brick labels
 %                .file.FullR2        - Path to FullR2 output file (.nii.gz)
@@ -56,8 +56,8 @@ if ~exist([filePath '.HEAD'], 'file')
 end
 
 % Store file information
-stats = struct();
-stats.file.bucket = statsFile;
+res = struct();
+res.bucket.file = statsFile;
 
 % Get sub-brick information using 3dinfo
 if ~exist('src','var') || ~isfield(src,'afni') || isempty(src.afni)
@@ -67,61 +67,60 @@ end
 
 % Get sub-brick labels
 cmd = {src.afni};
-cmd{end+1} = ['3dinfo -label ' stats.file.bucket '+orig'];
+cmd{end+1} = ['3dinfo -label ' res.bucket.file '+orig'];
 [brickLabelsStr,status] = runSysCmd(cmd);
 if status ~= 0
     error('Failed to get sub-brick labels from %s: %s', filePath, brickLabelsStr);
 end
-stats.brik.labels = strsplit(strtrim(brickLabelsStr),'|');
+res.bucket.brikLabels = strsplit(strtrim(brickLabelsStr),'|')';
 
 
 
 
 % Write FullR2
 statSuffix = 'FullR2';
-statIdx = startsWith(stats.brik.labels, 'Full_');
-statIdx = endsWith(stats.brik.labels, '_R^2') & statIdx;
-stats.file.(statSuffix)          = [statsFile '-' statSuffix '.nii.gz'];
-stats.fileBucketIdx.(statSuffix) = find(statIdx)-1;
-brick2nii(stats.file.bucket, stats.fileBucketIdx.(statSuffix), stats.file.(statSuffix));
+statIdx = startsWith(res.bucket.brikLabels, 'Full_');
+statIdx = endsWith(res.bucket.brikLabels, '_R^2') & statIdx;
+res.files.(statSuffix)          = [res.bucket.file '-' statSuffix '.nii.gz'];
+res.bucket.brikIdx.(statSuffix) = find(statIdx)-1;
+brick2nii(res.bucket.file, res.bucket.brikIdx.(statSuffix), res.files.(statSuffix));
 
 % Write FullFstat
 statSuffix = 'FullFstat';
-statIdx = startsWith(stats.brik.labels, 'Full_');
-statIdx = endsWith(stats.brik.labels, '_Fstat') & statIdx;
-stats.file.(statSuffix) = [statsFile '-' statSuffix '.nii.gz'];
-stats.fileBucketIdx.(statSuffix) = find(statIdx)-1;
-brick2nii(stats.file.bucket, stats.fileBucketIdx.(statSuffix), stats.file.(statSuffix));
+statIdx = startsWith(res.bucket.brikLabels, 'Full_');
+statIdx = endsWith(res.bucket.brikLabels, '_Fstat') & statIdx;
+res.files.(statSuffix) = [res.bucket.file '-' statSuffix '.nii.gz'];
+res.bucket.brikIdx.(statSuffix) = find(statIdx)-1;
+brick2nii(res.bucket.file, res.bucket.brikIdx.(statSuffix), res.files.(statSuffix));
 
 
 % Write TaskR2
 statSuffix = 'TaskR2';
-statIdx = startsWith(stats.brik.labels, 'task_');
-statIdx = endsWith(stats.brik.labels, '_R^2') & statIdx;
+statIdx = startsWith(res.bucket.brikLabels, 'task_');
+statIdx = endsWith(res.bucket.brikLabels, '_R^2') & statIdx;
 if nnz(statIdx)>1
     dbstack;
     error('Multiple task conditions. Code that');
 end
-stats.file.(statSuffix) = [statsFile '-' statSuffix '.nii.gz'];
-stats.fileBucketIdx.(statSuffix) = find(statIdx)-1;
-brick2nii(stats.file.bucket, stats.fileBucketIdx.(statSuffix), stats.file.(statSuffix));
+res.files.(statSuffix) = [res.bucket.file '-' statSuffix '.nii.gz'];
+res.bucket.brikIdx.(statSuffix) = find(statIdx)-1;
+brick2nii(res.bucket.file, res.bucket.brikIdx.(statSuffix), res.files.(statSuffix));
 
 % Write TaskFstat
 statSuffix = 'TaskFstat';
-statIdx = startsWith(stats.brik.labels, 'task_');
-statIdx = endsWith(stats.brik.labels, '_Fstat') & statIdx;
-stats.file.(statSuffix) = [statsFile '-' statSuffix '.nii.gz'];
-stats.fileBucketIdx.(statSuffix) = find(statIdx)-1;
-brick2nii(stats.file.bucket, stats.fileBucketIdx.(statSuffix), stats.file.(statSuffix));
+statIdx = startsWith(res.bucket.brikLabels, 'task_');
+statIdx = endsWith(res.bucket.brikLabels, '_Fstat') & statIdx;
+res.files.(statSuffix) = [res.bucket.file '-' statSuffix '.nii.gz'];
+res.bucket.brikIdx.(statSuffix) = find(statIdx)-1;
+brick2nii(res.bucket.file, res.bucket.brikIdx.(statSuffix), res.files.(statSuffix));
 
 % Write BaselineCoef
 statSuffix = 'baselineCoef';
-statIdx = startsWith(stats.brik.labels, 'Run#');
-statIdx = endsWith(stats.brik.labels, 'Pol#0_Coef') & statIdx;
-stats.file.(statSuffix) = [statsFile '-' statSuffix '.nii.gz'];
-stats.fileBucketIdx.(statSuffix) = find(statIdx)-1;
-brick2nii(stats.file.bucket, stats.fileBucketIdx.(statSuffix), stats.file.(statSuffix));
-
+statIdx = startsWith(res.bucket.brikLabels, 'Run#');
+statIdx = endsWith(res.bucket.brikLabels, 'Pol#0_Coef') & statIdx;
+res.files.(statSuffix) = [res.bucket.file '-' statSuffix '.nii.gz'];
+res.bucket.brikIdx.(statSuffix) = find(statIdx)-1;
+brick2nii(res.bucket.file, res.bucket.brikIdx.(statSuffix), res.files.(statSuffix));
 
 
 

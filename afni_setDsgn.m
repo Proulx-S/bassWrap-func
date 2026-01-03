@@ -17,7 +17,7 @@ function [cmd,files,dsgn] = afni_setDsgn(dsgn,file)
     elseif endsWith(file, {'.1D', '.nii','.nii.gz'})
         file = strsplit(file,'.'); file = file{1};
     else
-        dbstack; error('not sure what to do with file');
+        % do nothing
     end
     files.stimTimes    = [file '_stimTimes.1D'];
     files.resp    = [file '_resp.nii.gz'     ];
