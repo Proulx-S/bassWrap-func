@@ -20,8 +20,8 @@ function [cmd,files,dsgn] = afni_setDsgn(dsgn,file)
         dbstack; error('not sure what to do with file');
     end
     files.stimTimes    = [file '_stimTimes.1D'];
-    files.resp    = [file '_resp.1D'     ];
-    files.respStd = [file '_respStd.1D'  ];
+    files.resp    = [file '_resp.nii.gz'     ];
+    files.respStd = [file '_respStd.nii.gz'  ];
 
     
     % Set dsgn
@@ -36,8 +36,8 @@ function [cmd,files,dsgn] = afni_setDsgn(dsgn,file)
 
     switch dsgn.model
         case {'TENTzero', 'TENT'}
-            if isempty(dsgn.TENTzero.windowMethod)
-                dsgn.TENTzero.windowMethod = 'minISIrunInterrupted';
+            if isempty(dsgn.(dsgn.model).windowMethod)
+                dsgn.(dsgn.model).windowMethod = 'minISIrunInterrupted';
             end
     end
 
@@ -84,10 +84,10 @@ function [cmd,files,dsgn] = afni_setDsgn(dsgn,file)
                 nReg = 3;
                 if max(abs(diff(durSeq)))/max(durSeq) > 0.0001; dbstack; error('stim duration cannot be different across trials'); end
                 cmd{end+1} = ['-stim_times ' num2str(k) ' ' files.stimTimes ' ''' HRmodel '(' num2str(mean(durSeq),'%0.3f') ')'' \'];
-            case 'TENT'
-                dbstack; error('code that')
-            case 'TENTzero'
-                switch dsgn.TENTzero.windowMethod
+            % case 'TENT'
+            %     dbstack; error('code that')
+            case {'TENTzero', 'TENT'}
+                switch dsgn.(dsgn.model).windowMethod
                     case 'minISI'
                         % set the deconvolution window to the minimum ISI
                         % ISI is the time between any stimulus (of any condition)
@@ -102,7 +102,7 @@ function [cmd,files,dsgn] = afni_setDsgn(dsgn,file)
                             eTimeNext = dsgn.onsetList(eTimeNext_idx);
                         end
                         deconWin_sec = min(eTimeNext - eTime);
-                        deconSR = dsgn.TENTzero.sr;
+                        deconSR = dsgn.(dsgn.model).sr;
                         if (deconWin_sec*deconSR)/ceil(deconWin_sec*deconSR)>0.9
                             deconWin_sec = ceil(deconWin_sec*deconSR)/deconSR;
                         else
@@ -127,7 +127,7 @@ function [cmd,files,dsgn] = afni_setDsgn(dsgn,file)
                             eTimeNext = dsgn.onsetList(eTimeNext_idx);
                         end
                         deconWin_sec = min(eTimeNext - eTime);
-                        deconSR = dsgn.TENTzero.sr;
+                        deconSR = dsgn.(dsgn.model).sr;
                         if (deconWin_sec*deconSR)/ceil(deconWin_sec*deconSR)>0.9
                             deconWin_sec = ceil(deconWin_sec*deconSR)/deconSR;
                         else
@@ -141,15 +141,15 @@ function [cmd,files,dsgn] = afni_setDsgn(dsgn,file)
                 % (c-b)/(nReg-1)
                 % if param.PCflag
                 %     dbstack; error('double-check that');
-                %     cmd{end+1} = ['-stim_times ' num2str(k)            ' ' fStim{:,:,1} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
-                %     cmd{end+1} = ['-stim_times ' num2str(dsgn.condK+k) ' ' fStim{:,:,2} ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+                %     cmd{end+1} = ['-stim_times ' num2str(k)            ' ' fStim{:,:,1} ' ''(dsgn.model)(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+                %     cmd{end+1} = ['-stim_times ' num2str(dsgn.condK+k) ' ' fStim{:,:,2} ' ''(dsgn.model)(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
                 % else
-                    cmd{end+1} = ['-stim_times ' num2str(k) ' ' char(files.stimTimes) ' ''TENTzero(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
+                    cmd{end+1} = ['-stim_times ' num2str(k) ' ' char(files.stimTimes) ' ''' dsgn.model '(' num2str(b) ',' num2str(c) ',' num2str(nReg) ')'' \'];
                 % end
 
                 % deconvolve time vector
                 % for TENTzero the first and last regressors are removed and a fitted value of zero is assumed, effectively fixing these time points to the baseline
-                dsgn.TENTzero.tReg = linspace(b,c,nReg);
+                dsgn.(dsgn.model).tReg = linspace(b,c,nReg);
                 % if ~dryRun
                     % if param.PCflag
                     %     dbstack; error('double-check that');

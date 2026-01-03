@@ -1,7 +1,7 @@
 function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbose)
     global src
     if ~exist('verbose','var') || isempty(verbose); verbose = false; end
-        
+
 
 
     if isempty(scratch)
@@ -11,25 +11,33 @@ function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbo
         files.prefix = tempname(scratch);
     end
     files.cmd   = [files.prefix '_cmd-3dDeconvolve.txt'];
-    files.data  = [files.prefix '_ts.1D'];
-    files.data3D = [files.prefix '_tsX'];
+
+    
+
+    % Handles various input data formats
+    if iscell(data)
+        for i = 1:length(data)
+            if isnumeric(data{i})
+                files.data{i} = [files.prefix '_ts' num2str(i) '.nii.gz'];
+                MRIwriteDummy(files.data{i}, [data{i} zeros(size(data{i}))], 1/dsgn.sr);
+                data{i} = files.data{i};
+            else
+                error('code that');
+            end
+        end
+    else
+        files.data  = [files.prefix '_ts.1D'];
+    end
     files.xmat  = [files.prefix '.xmat.1D'];
     files.stats = [files.prefix '_stats'];
 
-    % Write data to 1D file (one value per line for proper 3dTcat conversion)
-    if iscolumn(data); data = permute(data,[2 1]); end
-    % Format as column vector (one value per line)
-    % dataCol = data(:);
-    writematrix(data, files.data,'Delimiter','space','FileType','text');
 
-    % % Convert 1D file to AFNI +orig format (single-voxel 3D+time dataset)
-    % % This forces 3dDeconvolve to output in bucket format
-    % cmdTcat = {src.afni};
-    % cmdTcat{end+1} = '3dTcat -overwrite \';
-    % cmdTcat{end+1} = ['-prefix ' files.data ' \'];
-    % cmdTcat{end+1} = ['-tr ' num2str(1/dsgn.sr) ' \'];
-    % cmdTcat{end+1} = files.data;
-    % system(strjoin(cmdTcat,newline),'-echo');
+    % % Write data to 1D file (one value per line for proper 3dTcat conversion)
+    % if iscolumn(data); data = permute(data,[2 1]); end
+    % % Format as column vector (one value per line)
+    % % dataCol = data(:);
+    % writematrix(data, files.data,'Delimiter','space','FileType','text');
+
 
 
 
@@ -45,11 +53,11 @@ function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbo
 
     cmd = {src.afni};
     cmd{end+1} = '3dDeconvolve -overwrite \';
-    cmd{end+1} = ['-input1D ' files.data ' \'];
-    cmd{end+1} = ['-TR_1D ' num2str(1/dsgn.sr) ' \'];
+    cmd{end+1} = ['-input ' strjoin(files.data,' ') ' \'];
+    % cmd{end+1} = ['-TR_1D ' num2str(1/dsgn.sr) ' \'];
     cmd{end+1} = '-polort 0 \';
     cmd{end+1} = ['-local_times \'];
-    [cmdTmp,tmpFiles,dsgn] = afni_setDsgn(dsgn,files.data);
+    [cmdTmp,tmpFiles,dsgn] = afni_setDsgn(dsgn,files.data{1});
     cmd = [cmd cmdTmp];
     files.resp      = tmpFiles.resp;
     files.respStd   = tmpFiles.respStd;
@@ -123,24 +131,37 @@ function [files,dsgn,cmd,cmdOut,res] = afni_3dDeconvolve(data,dsgn,scratch,verbo
 
 
 
+    %% Read 3dDeconvolve results
+    res.stats = afni_3dDeconvolve_readStats(files.stats);
+    res.resp  = afni_3dDeconvolve_readResp(files.resp,files.respStd);
+    res.base  = afni_3dDeconvolve_readBase(files.base);
 
 
-    %% Read back results
-    res.xMat = afni_readDsgnMat(files.xmat,dsgn);
-    res.resp = readmatrix(files.resp,'FileType','text');
-    res.respStd = readmatrix(files.respStd,'FileType','text');
+    % Read baseline to matlab
+labelList = {'baselineCoef'};
+for i = 1:numel(labelList)
+    stats.baseline.(labelList{i}).mri = MRIread(stats.file.(labelList{i}));
+end
 
-    voxelData = parseVoxelResultsFromCmdOut(cmdOut);
-    sectionStruct = parseAfniDeconvolveSections(voxelData.text);
-    for i = 1:length(sectionStruct.stimulus)
-        [~,res.respStats(i)] = parseSectionStats(sectionStruct.stimulus{i});
-    end
-    [res.baseline,~] = parseSectionStats(sectionStruct.baseline{1});
-    [~,res.fullStats] = parseSectionStats(sectionStruct.fullModel{1});
 
-    res.resp = res.resp + res.baseline;
 
-    res.dsgn = dsgn;
+
+    % %% Read back results
+    % res.xMat = afni_readDsgnMat(files.xmat,dsgn);
+    % res.resp = readmatrix(files.resp,'FileType','text');
+    % res.respStd = readmatrix(files.respStd,'FileType','text');
+
+    % voxelData = parseVoxelResultsFromCmdOut(cmdOut);
+    % sectionStruct = parseAfniDeconvolveSections(voxelData.text);
+    % for i = 1:length(sectionStruct.stimulus)
+    %     [~,res.respStats(i)] = parseSectionStats(sectionStruct.stimulus{i});
+    % end
+    % [res.baseline,~] = parseSectionStats(sectionStruct.baseline{1});
+    % [~,res.fullStats] = parseSectionStats(sectionStruct.fullModel{1});
+
+    % res.resp = res.resp + res.baseline;
+
+    % res.dsgn = dsgn;
 
     % clean tmp files
     delete([files.prefix '*']);
